@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
-import { FileUp, FileText, Download, Loader2, AlertCircle, Upload, X, Settings, File, Info } from "lucide-react";
+import { FileUp, FileText, Download, Loader2, AlertCircle, Upload, X, Settings } from "lucide-react";
 import { clsx } from "clsx";
 
 type Version = "docx" | "classic";
@@ -40,14 +40,14 @@ const saveToHistory = (name: string, template: string, status: "completed" | "fa
       status,
       filename
     };
-    localStorage.setItem(HISTORY_KEY, JSON.stringify([newItem, ...history].slice(0, 50))); // Keep last 50
+    localStorage.setItem(HISTORY_KEY, JSON.stringify([newItem, ...history].slice(0, 50)));
   } catch (e) {
     console.error("Failed to save to history:", e);
   }
 };
 
 export default function GeneratePage() {
-  const [version, setVersion] = useState<Version>("docx");
+  const [version, setVersion] = useState<Version>("classic");
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [detectedFields, setDetectedFields] = useState<{ name: string; value: string }[]>([]);
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -60,9 +60,12 @@ export default function GeneratePage() {
   const [generatedPdf, setGeneratedPdf] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [classicFormData, setClassicFormData] = useState<Record<string, string>>(
-    Object.fromEntries(MASTER_CAESAR_FIELDS.map(f => [f.name, ""]))
-  );
+  // Classic version starts with 16 pre-filled fields
+  const [classicFormData, setClassicFormData] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    MASTER_CAESAR_FIELDS.forEach(f => { initial[f.name] = ""; });
+    return initial;
+  });
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -106,32 +109,40 @@ export default function GeneratePage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
     try {
+      let payloadJson: Record<string, string> = {};
+      let fileToUse: File | null = null;
+
       if (version === "docx") {
         if (!templateFile) throw new Error("Please upload a DOCX template");
-        const payload = new FormData();
-        payload.append("file", templateFile);
-        const payloadJson: Record<string, string> = {};
+        fileToUse = templateFile;
         detectedFields.forEach(field => { if (field.name && formData[field.name]) payloadJson[field.name] = formData[field.name]; });
-        payload.append("payload", JSON.stringify(payloadJson));
-        const options: Record<string, any> = { smartReplace: false, filename: filename || undefined };
-        if (useWatermark) options.watermark = { enabled: true, text: watermarkText };
-        payload.append("options", JSON.stringify(options));
-        
-        const response = await fetch("https://docgen-production-503d.up.railway.app/api/v1/docx/generate", { method: "POST", body: payload });
-        
-        if (!response.ok) throw new Error("Failed to generate PDF");
-        
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        setGeneratedPdf(url);
-        
-        // Save to history
-        const docName = filename || detectedFields.find(f => f.name.includes("invoice"))?.value || "Document";
-        saveToHistory(docName, "invoice", "completed", `${docName}.pdf`);
       } else {
-        throw new Error("Please use DOCX version");
+        // Classic version - requires template upload
+        if (!templateFile) throw new Error("Please upload Master_Caesar.docx template");
+        fileToUse = templateFile;
+        MASTER_CAESAR_FIELDS.forEach(field => { if (classicFormData[field.name]) payloadJson[field.name] = classicFormData[field.name]; });
       }
+
+      const payload = new FormData();
+      payload.append("file", fileToUse);
+      payload.append("payload", JSON.stringify(payloadJson));
+
+      const options: Record<string, any> = { smartReplace: false, filename: filename || undefined };
+      if (useWatermark) options.watermark = { enabled: true, text: watermarkText };
+      payload.append("options", JSON.stringify(options));
+
+      const response = await fetch("https://docgen-production-503d.up.railway.app/api/v1/docx/generate", { method: "POST", body: payload });
+
+      if (!response.ok) throw new Error("Failed to generate PDF");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setGeneratedPdf(url);
+
+      const docName = filename || payloadJson["invoice_no"] || payloadJson["client_name"] || "Document";
+      saveToHistory(docName, "invoice", "completed", `${docName}.pdf`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
       const docName = filename || "Document";
@@ -150,6 +161,11 @@ export default function GeneratePage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const switchVersion = (v: Version) => {
+    setVersion(v);
+    resetForm();
+  };
+
   const activeFormData = version === "docx" ? formData : classicFormData;
   const activeFields = version === "docx" ? detectedFields : MASTER_CAESAR_FIELDS;
 
@@ -162,17 +178,21 @@ export default function GeneratePage() {
           <h1 className="font-display text-5xl md:text-6xl font-medium mb-3">
             Generate <span className="gradient-text">Document</span>
           </h1>
-          <p className="text-muted-foreground text-lg max-w-xl">Upload a DOCX template, fill in the fields, and generate professional PDF documents instantly.</p>
+          <p className="text-muted-foreground text-lg max-w-xl">
+            {version === "docx" 
+              ? "Upload a DOCX template, fill in the fields, and generate professional PDF documents instantly."
+              : "Use pre-defined Master Caesar invoice template. Upload template, fill 16 fields, generate PDF."}
+          </p>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-8">
           <label className="block text-sm text-muted-foreground mb-3 uppercase tracking-wider font-mono text-xs">Select Version</label>
           <div className="flex gap-2">
             {[
+              { id: "classic", label: "Classic (16 Fields)" },
               { id: "docx", label: "DOCX Upload" },
-              { id: "classic", label: "Classic (Hardcoded)" },
             ].map((v) => (
-              <button key={v.id} onClick={() => { setVersion(v.id as Version); resetForm(); }}
+              <button key={v.id} onClick={() => switchVersion(v.id as Version)}
                 className={clsx("px-6 py-3 rounded-lg font-medium transition-all duration-200",
                   version === v.id ? "bg-primary text-background shadow-lg shadow-primary/20" : "bg-surface border border-border text-muted-foreground hover:text-foreground hover:border-border-default")}>
                 {v.label}
@@ -183,30 +203,35 @@ export default function GeneratePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 space-y-6">
-            {version === "docx" && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-                <label className="block text-sm text-muted-foreground mb-3 uppercase tracking-wider font-mono text-xs">Template File</label>
-                <div onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-border rounded-xl p-12 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group">
-                  {templateFile ? (
-                    <div className="flex items-center justify-center gap-4">
-                      <FileText className="w-10 h-10 text-primary" />
-                      <div className="text-left">
-                        <p className="font-medium text-lg">{templateFile.name}</p>
-                        <p className="text-sm text-muted-foreground">{(templateFile.size / 1024).toFixed(1)} KB</p>
-                      </div>
-                      <button onClick={(e) => { e.stopPropagation(); resetForm(); }} className="p-2 hover:bg-surface-elevated rounded-lg"><X className="w-5 h-5" /></button>
+            {/* Template Upload - Always required */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+              <label className="block text-sm text-muted-foreground mb-3 uppercase tracking-wider font-mono text-xs">
+                {version === "docx" ? "Your Template" : "Master_Caesar Template"}
+              </label>
+              <div onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-border rounded-xl p-12 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group">
+                {templateFile ? (
+                  <div className="flex items-center justify-center gap-4">
+                    <FileText className="w-10 h-10 text-primary" />
+                    <div className="text-left">
+                      <p className="font-medium text-lg">{templateFile.name}</p>
+                      <p className="text-sm text-muted-foreground">{(templateFile.size / 1024).toFixed(1)} KB</p>
                     </div>
-                  ) : (
-                    <div>
-                      <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4 group-hover:text-primary transition-colors" />
-                      <p className="text-muted-foreground">Drop your DOCX template here or <span className="text-primary">browse</span></p>
-                    </div>
-                  )}
-                </div>
-                <input ref={fileInputRef} type="file" accept=".docx" onChange={handleFileSelect} className="hidden" />
-              </motion.div>
-            )}
+                    <button onClick={(e) => { e.stopPropagation(); resetForm(); }} className="p-2 hover:bg-surface-elevated rounded-lg"><X className="w-5 h-5" /></button>
+                  </div>
+                ) : (
+                  <div>
+                    <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4 group-hover:text-primary transition-colors" />
+                    <p className="text-muted-foreground">
+                      {version === "classic" 
+                        ? "Upload Master_Caesar.docx template" 
+                        : "Drop your DOCX template here or browse"}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <input ref={fileInputRef} type="file" accept=".docx" onChange={handleFileSelect} className="hidden" />
+            </motion.div>
 
             {scanning && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 bg-surface rounded-xl border border-border flex items-center gap-3">
@@ -274,7 +299,7 @@ export default function GeneratePage() {
                 </div>
               )}
 
-              <button onClick={handleSubmit} disabled={loading || (version === "docx" && !templateFile)}
+              <button onClick={handleSubmit} disabled={loading || !templateFile}
                 className="w-full py-4 bg-primary text-background font-medium rounded-xl hover:bg-primary-hover transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-primary/20">
                 {loading ? <><Loader2 className="w-5 h-5 animate-spin" />Generating...</> : <><Download className="w-5 h-5" />Generate PDF</>}
               </button>
