@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { FileText, Plus, History, Settings, Sparkles } from "lucide-react";
+import { FileText, Plus, History, Settings } from "lucide-react";
 import { clsx } from "clsx";
 
 const navItems = [
@@ -21,8 +22,14 @@ export function Navigation() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center justify-between h-16">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-              <Sparkles className="w-5 h-5 text-primary" />
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 overflow-hidden">
+              <Image 
+                src="/logo.svg" 
+                alt="DocGen" 
+                width={28} 
+                height={28}
+                className="w-7 h-7"
+              />
             </div>
             <span className="font-display font-medium text-xl tracking-tight">
               DocGen

@@ -5,6 +5,9 @@ import { Navigation } from "@/components/layout/Navigation";
 export const metadata: Metadata = {
   title: "DocGen - PDF Document Generator",
   description: "Generate professional PDF business documents from DOCX templates",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({
