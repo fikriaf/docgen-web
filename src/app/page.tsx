@@ -28,6 +28,8 @@ const MASTER_CAESAR_FIELDS = [
 
 const HISTORY_KEY = "docgen_history";
 
+const API_BASE = "https://docgen-production-503d.up.railway.app/api/v1";
+
 const saveToHistory = (name: string, template: string, status: "completed" | "failed", filename?: string) => {
   try {
     const existing = localStorage.getItem(HISTORY_KEY);
@@ -58,9 +60,9 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedPdf, setGeneratedPdf] = useState<string | null>(null);
+  const [corsNote, setCorsNote] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Classic version starts with 16 pre-filled fields
   const [classicFormData, setClassicFormData] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     MASTER_CAESAR_FIELDS.forEach(f => { initial[f.name] = ""; });
@@ -80,7 +82,7 @@ export default function GeneratePage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const response = await fetch("https://docgen-production-503d.up.railway.app/api/v1/docx/scan", {
+      const response = await fetch(`${API_BASE}/docx/scan`, {
         method: "POST",
         body: formData,
       });
@@ -94,7 +96,8 @@ export default function GeneratePage() {
         setFormData(initialData);
       }
     } catch (err) {
-      setError("Using default fields.");
+      // CORS or network error
+      setCorsNote(true);
       setDetectedFields(MASTER_CAESAR_FIELDS.map(f => ({ name: f.name, value: "" })));
       setFormData(Object.fromEntries(MASTER_CAESAR_FIELDS.map(f => [f.name, ""])));
     } finally {
@@ -109,6 +112,7 @@ export default function GeneratePage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setCorsNote(false);
 
     try {
       let payloadJson: Record<string, string> = {};
@@ -119,7 +123,6 @@ export default function GeneratePage() {
         fileToUse = templateFile;
         detectedFields.forEach(field => { if (field.name && formData[field.name]) payloadJson[field.name] = formData[field.name]; });
       } else {
-        // Classic version - requires template upload
         if (!templateFile) throw new Error("Please upload Master_Caesar.docx template");
         fileToUse = templateFile;
         MASTER_CAESAR_FIELDS.forEach(field => { if (classicFormData[field.name]) payloadJson[field.name] = classicFormData[field.name]; });
@@ -133,7 +136,7 @@ export default function GeneratePage() {
       if (useWatermark) options.watermark = { enabled: true, text: watermarkText };
       payload.append("options", JSON.stringify(options));
 
-      const response = await fetch("https://docgen-production-503d.up.railway.app/api/v1/docx/generate", { method: "POST", body: payload });
+      const response = await fetch(`${API_BASE}/docx/generate`, { method: "POST", body: payload });
 
       if (!response.ok) throw new Error("Failed to generate PDF");
 
@@ -144,7 +147,13 @@ export default function GeneratePage() {
       const docName = filename || payloadJson["invoice_no"] || payloadJson["client_name"] || "Document";
       saveToHistory(docName, "invoice", "completed", `${docName}.pdf`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      // Check if it's a CORS error
+      if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
+        setCorsNote(true);
+        setError("CORS error: Please run this app locally or use a CORS proxy");
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred");
+      }
       const docName = filename || "Document";
       saveToHistory(docName, "invoice", "failed");
     } finally {
@@ -158,6 +167,7 @@ export default function GeneratePage() {
     setFormData({});
     setGeneratedPdf(null);
     setError(null);
+    setCorsNote(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -185,6 +195,25 @@ export default function GeneratePage() {
           </p>
         </motion.div>
 
+        {/* CORS Warning */}
+        {corsNote && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-yellow-500 mb-1">CORS Error Detected</p>
+                <p className="text-sm text-muted-foreground">
+                  The API is blocking requests from this domain. To fix this, either:
+                </p>
+                <ul className="text-sm text-muted-foreground mt-2 list-disc list-inside">
+                  <li>Run the app locally: <code className="bg-surface px-1 rounded">npm run dev</code></li>
+                  <li>Or add CORS headers to the backend API</li>
+                </ul>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-8">
           <label className="block text-sm text-muted-foreground mb-3 uppercase tracking-wider font-mono text-xs">Select Version</label>
           <div className="flex gap-2">
@@ -203,7 +232,6 @@ export default function GeneratePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 space-y-6">
-            {/* Template Upload - Always required */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
               <label className="block text-sm text-muted-foreground mb-3 uppercase tracking-wider font-mono text-xs">
                 {version === "docx" ? "Your Template" : "Master_Caesar Template"}
@@ -214,7 +242,7 @@ export default function GeneratePage() {
                   <div className="flex items-center justify-center gap-4">
                     <FileText className="w-10 h-10 text-primary" />
                     <div className="text-left">
-                      <p className="font-medium text-lg">{templateFile.name}</p>
+                      <p className="font-medium text-lg">{ templateFile.name}</p>
                       <p className="text-sm text-muted-foreground">{(templateFile.size / 1024).toFixed(1)} KB</p>
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); resetForm(); }} className="p-2 hover:bg-surface-elevated rounded-lg"><X className="w-5 h-5" /></button>
@@ -223,9 +251,7 @@ export default function GeneratePage() {
                   <div>
                     <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4 group-hover:text-primary transition-colors" />
                     <p className="text-muted-foreground">
-                      {version === "classic" 
-                        ? "Upload Master_Caesar.docx template" 
-                        : "Drop your DOCX template here or browse"}
+                      {version === "classic" ? "Upload Master_Caesar.docx template" : "Drop your DOCX template here or browse"}
                     </p>
                   </div>
                 )}
@@ -293,7 +319,7 @@ export default function GeneratePage() {
                 </div>
               </div>
 
-              {error && (
+              {error && !corsNote && (
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-2">
                   <AlertCircle className="w-5 h-5" />{error}
                 </div>
