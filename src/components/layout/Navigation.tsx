@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { FileText, Plus, History, Settings } from "lucide-react";
+import { FileText, Plus, History, Settings, Sparkles } from "lucide-react";
 import { clsx } from "clsx";
 
 const navItems = [
@@ -17,14 +17,14 @@ export function Navigation() {
   const pathname = usePathname();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border-subtle bg-background/80 backdrop-blur-xl">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+      <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center justify-between h-16">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-              <FileText className="w-5 h-5 text-primary" />
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+              <Sparkles className="w-5 h-5 text-primary" />
             </div>
-            <span className="font-display font-bold text-xl tracking-tight">
+            <span className="font-display font-medium text-xl tracking-tight">
               DocGen
             </span>
           </Link>
@@ -45,7 +45,7 @@ export function Navigation() {
                   {isActive && (
                     <motion.div
                       layoutId="navbar"
-                      className="absolute inset-0 bg-surface-elevated rounded-lg"
+                      className="absolute inset-0 bg-surface rounded-lg"
                       transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                     />
                   )}
