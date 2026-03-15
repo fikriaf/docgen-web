@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { FileUp, FileText, Download, Loader2, AlertCircle, Upload, X, Settings, File } from "lucide-react";
+import { FileUp, FileText, Download, Loader2, AlertCircle, Upload, X, Settings, File, Info } from "lucide-react";
 import { clsx } from "clsx";
 
 type Version = "docx" | "classic";
@@ -25,6 +25,26 @@ const MASTER_CAESAR_FIELDS = [
   { name: "number_bank", label: "Bank Number" },
   { name: "total_due", label: "Total Due" },
 ];
+
+const HISTORY_KEY = "docgen_history";
+
+const saveToHistory = (name: string, template: string, status: "completed" | "failed", filename?: string) => {
+  try {
+    const existing = localStorage.getItem(HISTORY_KEY);
+    const history = existing ? JSON.parse(existing) : [];
+    const newItem = {
+      id: Date.now().toString(),
+      template,
+      name,
+      date: new Date().toISOString(),
+      status,
+      filename
+    };
+    localStorage.setItem(HISTORY_KEY, JSON.stringify([newItem, ...history].slice(0, 50))); // Keep last 50
+  } catch (e) {
+    console.error("Failed to save to history:", e);
+  }
+};
 
 export default function GeneratePage() {
   const [version, setVersion] = useState<Version>("docx");
@@ -97,15 +117,25 @@ export default function GeneratePage() {
         const options: Record<string, any> = { smartReplace: false, filename: filename || undefined };
         if (useWatermark) options.watermark = { enabled: true, text: watermarkText };
         payload.append("options", JSON.stringify(options));
+        
         const response = await fetch("https://docgen-production-503d.up.railway.app/api/v1/docx/generate", { method: "POST", body: payload });
+        
         if (!response.ok) throw new Error("Failed to generate PDF");
+        
         const blob = await response.blob();
-        setGeneratedPdf(URL.createObjectURL(blob));
+        const url = URL.createObjectURL(blob);
+        setGeneratedPdf(url);
+        
+        // Save to history
+        const docName = filename || detectedFields.find(f => f.name.includes("invoice"))?.value || "Document";
+        saveToHistory(docName, "invoice", "completed", `${docName}.pdf`);
       } else {
         throw new Error("Please use DOCX version");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
+      const docName = filename || "Document";
+      saveToHistory(docName, "invoice", "failed");
     } finally {
       setLoading(false);
     }
