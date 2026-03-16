@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FileText, Clock, Download, Trash2, FileX, Archive, Lock, KeyRound } from "lucide-react";
 import { useState, useEffect } from "react";
 import { verifyPassword, isAuthenticated, setAuthenticated } from "@/lib/auth";
+import { getPdf, deletePdf } from "@/lib/pdfStorage";
 
 type HistoryItem = {
   id: string;
@@ -48,7 +49,8 @@ export default function HistoryPage() {
     setHistory(items);
   };
 
-  const deleteItem = (id: string) => {
+  const deleteItem = async (id: string) => {
+    await deletePdf(id);
     const newHistory = history.filter(item => item.id !== id);
     saveHistory(newHistory);
   };
@@ -59,8 +61,25 @@ export default function HistoryPage() {
     }
   };
 
-  const downloadFile = (item: HistoryItem) => {
-    alert(`Download: ${item.filename || item.name}.pdf`);
+  const downloadFile = async (item: HistoryItem) => {
+    try {
+      const blob = await getPdf(item.id);
+      if (!blob) {
+        alert("PDF file not found. The document may have been cleared from storage.");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = item.filename || `${item.name}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed:", error);
+      alert("Failed to download PDF");
+    }
   };
 
   const handleUnlock = async (e: React.FormEvent) => {

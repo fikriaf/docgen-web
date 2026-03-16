@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { FileUp, FileText, Download, Loader2, AlertCircle, Upload, X, Settings } from "lucide-react";
 import { clsx } from "clsx";
+import { storePdf } from "@/lib/pdfStorage";
 
 type Version = "docx" | "classic";
 
@@ -30,12 +31,12 @@ const HISTORY_KEY = "docgen_history";
 
 const API_BASE = "https://docgen-production-503d.up.railway.app/api/v1";
 
-const saveToHistory = (name: string, template: string, status: "completed" | "failed", filename?: string) => {
+const saveToHistory = (name: string, template: string, status: "completed" | "failed", filename?: string, id?: string) => {
   try {
     const existing = localStorage.getItem(HISTORY_KEY);
     const history = existing ? JSON.parse(existing) : [];
     const newItem = {
-      id: Date.now().toString(),
+      id: id || Date.now().toString(),
       template,
       name,
       date: new Date().toISOString(),
@@ -145,7 +146,10 @@ export default function GeneratePage() {
       setGeneratedPdf(url);
 
       const docName = filename || payloadJson["invoice_no"] || payloadJson["client_name"] || "Document";
-      saveToHistory(docName, "invoice", "completed", `${docName}.pdf`);
+      const historyId = Date.now().toString();
+      
+      await storePdf(historyId, blob);
+      saveToHistory(docName, "invoice", "completed", `${docName}.pdf`, historyId);
     } catch (err) {
       // Check if it's a CORS error
       if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
