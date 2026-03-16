@@ -1,8 +1,9 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { FileText, Clock, Download, Trash2, FileX, Archive } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FileText, Clock, Download, Trash2, FileX, Archive, Lock, KeyRound } from "lucide-react";
 import { useState, useEffect } from "react";
+import { verifyPassword, isAuthenticated, setAuthenticated } from "@/lib/auth";
 
 type HistoryItem = {
   id: string;
@@ -18,9 +19,19 @@ const STORAGE_KEY = "docgen_history";
 export default function HistoryPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
-  // Load from localStorage
   useEffect(() => {
+    const auth = isAuthenticated();
+    setIsUnlocked(auth);
+  }, []);
+
+  useEffect(() => {
+    if (!isUnlocked) return;
+
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
@@ -30,9 +41,8 @@ export default function HistoryPage() {
       }
     }
     setLoading(false);
-  }, []);
+  }, [isUnlocked]);
 
-  // Save to localStorage
   const saveHistory = (items: HistoryItem[]) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     setHistory(items);
@@ -50,9 +60,105 @@ export default function HistoryPage() {
   };
 
   const downloadFile = (item: HistoryItem) => {
-    // In real app, would fetch from storage or API
     alert(`Download: ${item.filename || item.name}.pdf`);
   };
+
+  const handleUnlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password.trim()) {
+      setError("Please enter password");
+      return;
+    }
+
+    setVerifying(true);
+    setError("");
+
+    const valid = await verifyPassword(password);
+
+    if (valid) {
+      setAuthenticated(true);
+      setIsUnlocked(true);
+      setPassword("");
+    } else {
+      setError("Incorrect password");
+    }
+
+    setVerifying(false);
+  };
+
+  if (!isUnlocked) {
+    return (
+      <div className="min-h-screen pt-24 pb-16 flex items-center justify-center relative">
+        <div className="fixed inset-0 bg-grid opacity-30 pointer-events-none" />
+        <div className="noise" />
+        
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="w-full max-w-md mx-auto px-6"
+        >
+          <div className="p-8 bg-surface rounded-2xl border border-border shadow-xl">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 mx-auto mb-4 flex items-center justify-center">
+                <Lock className="w-7 h-7 text-primary" />
+              </div>
+              <h2 className="font-display text-2xl font-medium mb-2">
+                <span className="gradient-text">History Protected</span>
+              </h2>
+              <p className="text-muted-foreground">
+                Enter password to view document history
+              </p>
+            </div>
+
+            <form onSubmit={handleUnlock} className="space-y-4">
+              <div>
+                <div className="relative">
+                  <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    autoFocus
+                    className="w-full pl-12 pr-4 py-4 bg-background border border-border rounded-xl focus:border-primary focus:ring-1 focus:ring-primary/20 text-center text-lg"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <motion.p
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-red-400 text-sm text-center"
+                >
+                  {error}
+                </motion.p>
+              )}
+
+              <button
+                type="submit"
+                disabled={verifying}
+                className="w-full py-4 bg-primary text-background font-medium rounded-xl hover:bg-primary-hover transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+              >
+                {verifying ? (
+                  <>
+                    <Clock className="w-5 h-5 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-5 h-5" />
+                    Unlock History
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -66,7 +172,7 @@ export default function HistoryPage() {
     <div className="min-h-screen pt-24 pb-16 relative">
       <div className="fixed inset-0 bg-grid opacity-30 pointer-events-none" />
       <div className="noise" />
-      
+
       <div className="max-w-4xl mx-auto px-6 relative">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <div className="flex items-center justify-between">
@@ -88,8 +194,8 @@ export default function HistoryPage() {
         </motion.div>
 
         {history.length === 0 ? (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center py-20"
           >
@@ -139,14 +245,14 @@ export default function HistoryPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={`px-2 py-1 rounded text-xs ${
-                    item.status === "completed" 
-                      ? "bg-secondary/10 text-secondary" 
+                    item.status === "completed"
+                      ? "bg-secondary/10 text-secondary"
                       : "bg-red-500/10 text-red-400"
                   }`}>
                     {item.status}
                   </span>
                   {item.status === "completed" ? (
-                    <button 
+                    <button
                       onClick={() => downloadFile(item)}
                       className="p-2 hover:bg-surface-elevated rounded-lg transition-colors"
                     >
@@ -155,7 +261,7 @@ export default function HistoryPage() {
                   ) : (
                     <FileX className="w-4 h-4 text-red-400" />
                   )}
-                  <button 
+                  <button
                     onClick={() => deleteItem(item.id)}
                     className="p-2 hover:bg-surface-elevated rounded-lg transition-colors"
                   >
