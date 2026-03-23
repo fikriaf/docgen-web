@@ -5,7 +5,7 @@ import { Settings, Link, Key, Bell, Palette, Info, ExternalLink } from "lucide-r
 import { useState } from "react";
 
 export default function SettingsPage() {
-  const [apiUrl, setApiUrl] = useState("https://docgen-production-503d.up.railway.app");
+  const [apiUrl, setApiUrl] = useState("http://localhost:3000");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("stepfun/step-3.5-flash:free");
   const [notifications, setNotifications] = useState(true);
