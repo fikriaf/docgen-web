@@ -3,6 +3,9 @@ const SALT = "docgen_history_salt_2026";
 const HASHED_PASSWORD = "47d5b6bb925eb195a878d4a7b745b0b85178e8c2e121c02cbce0934d30c51049";
 
 export async function hashPassword(password: string): Promise<string> {
+  if (typeof window === "undefined" || !crypto?.subtle) {
+    throw new Error("Crypto not available");
+  }
   const encoder = new TextEncoder();
   const data = encoder.encode(SALT + password);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -11,6 +14,9 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string): Promise<boolean> {
+  if (typeof window === "undefined" || !crypto?.subtle) {
+    return false;
+  }
   const hash = await hashPassword(password);
   return hash === HASHED_PASSWORD;
 }
